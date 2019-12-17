@@ -9,6 +9,7 @@ import * as React from 'react';
 import TestRenderer from 'react-test-renderer';
 import {FeatureApp, FeatureAppContainer, FeatureHubContextProvider} from '..';
 import {logger} from './logger';
+import {TestErrorBoundary} from './test-error-boundary';
 
 describe('FeatureAppContainer', () => {
   let mockFeatureAppManager: FeatureAppManager;
@@ -81,10 +82,12 @@ describe('FeatureAppContainer', () => {
     node: React.ReactNode,
     {
       customLogger = true,
-      testRendererOptions
+      testRendererOptions,
+      handleError = jest.fn()
     }: {
       customLogger?: boolean;
       testRendererOptions?: TestRenderer.TestRendererOptions;
+      handleError?: (error: Error) => void;
     } = {}
   ) =>
     TestRenderer.create(
@@ -94,7 +97,7 @@ describe('FeatureAppContainer', () => {
           logger: customLogger ? logger : undefined
         }}
       >
-        {node}
+        <TestErrorBoundary handleError={handleError}>{node}</TestErrorBoundary>
       </FeatureHubContextProvider>,
       testRendererOptions
     );
@@ -664,24 +667,23 @@ describe('FeatureAppContainer', () => {
             onErrorMockError = new Error('Throwing in onError.');
           });
 
-          it('re-throws the error', () => {
-            expect(() =>
-              renderWithFeatureHubContext(
-                <FeatureAppContainer
-                  featureAppId="testId"
-                  featureAppDefinition={mockFeatureAppDefinition}
-                  onError={() => {
-                    throw onErrorMockError;
-                  }}
-                />,
-                {testRendererOptions: {createNodeMock: () => ({})}}
-              )
-            ).toThrowError(onErrorMockError);
+          it.only('re-throws the error', () => {
+            const handleError = jest.fn();
 
-            expectConsoleErrorCalls([
-              [expect.any(String), onErrorMockError],
-              ...noErrorBoundaryConsoleErrorCalls
-            ]);
+            const testRenderer = renderWithFeatureHubContext(
+              <FeatureAppContainer
+                featureAppId="testId"
+                featureAppDefinition={mockFeatureAppDefinition}
+                onError={() => {
+                  throw onErrorMockError;
+                }}
+              />,
+              {handleError, testRendererOptions: {createNodeMock: () => ({})}}
+            );
+
+            expect(handleError.mock.calls).toEqual([[onErrorMockError]]);
+            expect(testRenderer.toJSON()).toBe('test error boundary');
+            // expectConsoleErrorCalls(usingTestErrorBoundaryConsoleErrorCalls);
           });
         });
       });

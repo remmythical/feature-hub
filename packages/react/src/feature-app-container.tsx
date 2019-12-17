@@ -15,10 +15,20 @@ import {
   isReactFeatureApp
 } from './internal/type-guards';
 
+export interface BaseFeatureApp {
+  /**
+   * A Feature App can define a promise that is resolved when it is ready to
+   * render its content, e.g. after fetching required data first. If the
+   * integrator has defined a loading UI, it will be rendered until the promise
+   * is resolved.
+   */
+  readonly loading?: Promise<void>;
+}
+
 /**
  * The recommended way of writing a Feature App for a React integrator.
  */
-export interface ReactFeatureApp {
+export interface ReactFeatureApp extends BaseFeatureApp {
   /**
    * A React Feature App must define a `render` method that returns a React
    * element. Since this element is directly rendered by React, the standard
@@ -32,7 +42,7 @@ export interface ReactFeatureApp {
  * A DOM Feature App allows the use of other frontend technologies such as
  * Vue.js or Angular, although it is placed on a web page using React.
  */
-export interface DomFeatureApp {
+export interface DomFeatureApp extends BaseFeatureApp {
   /**
    * @param container The container element to which the Feature App can attach
    * itself.
@@ -98,6 +108,8 @@ export interface FeatureAppContainerProps<
   readonly onError?: (error: Error) => void;
 
   readonly renderError?: (error: Error) => React.ReactNode;
+
+  readonly renderLoadingUi?: () => React.ReactNode;
 }
 
 type InternalFeatureAppContainerProps<
@@ -109,7 +121,7 @@ type InternalFeatureAppContainerProps<
 
 type InternalFeatureAppContainerState<TFeatureApp extends FeatureApp> =
   | {readonly featureAppError: Error}
-  | {readonly featureApp: TFeatureApp};
+  | {readonly featureApp: TFeatureApp; readonly loading: boolean};
 
 class InternalFeatureAppContainer<
   TFeatureApp extends FeatureApp,
@@ -148,13 +160,15 @@ class InternalFeatureAppContainer<
         {baseUrl, config, beforeCreate, done}
       );
 
-      if (!isFeatureApp(this.featureAppScope.featureApp)) {
+      const {featureApp} = this.featureAppScope;
+
+      if (!isFeatureApp(featureApp)) {
         throw new Error(
           'Invalid Feature App found. The Feature App must be an object with either 1) a `render` method that returns a React element, or 2) an `attachTo` method that accepts a container DOM element.'
         );
       }
 
-      this.state = {featureApp: this.featureAppScope.featureApp};
+      this.state = {featureApp, loading: Boolean(featureApp.loading)};
     } catch (error) {
       this.handleError(error);
 
@@ -168,8 +182,17 @@ class InternalFeatureAppContainer<
     this.setState({featureAppError: error});
   }
 
-  public componentDidMount(): void {
+  public async componentDidMount(): Promise<void> {
     const container = this.containerRef.current;
+
+    if ('featureApp' in this.state && this.state.featureApp.loading) {
+      try {
+        await this.state.featureApp.loading;
+        this.setState({loading: false});
+      } catch (error) {
+        this.componentDidCatch(error);
+      }
+    }
 
     if (
       container &&
@@ -197,6 +220,10 @@ class InternalFeatureAppContainer<
   public render(): React.ReactNode {
     if ('featureAppError' in this.state) {
       return this.renderError(this.state.featureAppError);
+    }
+
+    if (this.state.loading) {
+      return this.props.renderLoadingUi ? this.props.renderLoadingUi() : null;
     }
 
     if (isReactFeatureApp(this.state.featureApp)) {
