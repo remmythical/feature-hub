@@ -107,9 +107,15 @@ export interface FeatureAppContainerProps<
 
   readonly onError?: (error: Error) => void;
 
+  /**
+   * @deprecated Use the `children` render function instead to render an error.
+   */
   readonly renderError?: (error: Error) => React.ReactNode;
 
-  readonly renderLoadingUi?: () => React.ReactNode;
+  readonly children?: (
+    featureApp?: React.ReactNode,
+    error?: Error
+  ) => React.ReactNode;
 }
 
 type InternalFeatureAppContainerProps<
@@ -168,6 +174,7 @@ class InternalFeatureAppContainer<
         );
       }
 
+      // TODO: schedule rerender with async ssr manager
       this.state = {featureApp, loading: Boolean(featureApp.loading)};
     } catch (error) {
       this.handleError(error);
