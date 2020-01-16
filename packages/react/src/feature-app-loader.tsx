@@ -68,7 +68,16 @@ export interface FeatureAppLoaderProps<TConfig = unknown> {
 
   readonly onError?: (error: Error) => void;
 
+  /**
+   * @deprecated Use the `children` render function instead to render an error.
+   */
   readonly renderError?: (error: Error) => React.ReactNode;
+
+  readonly children?: (params: {
+    featureApp?: React.ReactNode;
+    error?: Error;
+    loading: boolean;
+  }) => React.ReactNode;
 }
 
 type InternalFeatureAppLoaderProps<TConfig> = FeatureAppLoaderProps<TConfig> &
@@ -180,6 +189,7 @@ class InternalFeatureAppLoader<TConfig = unknown> extends React.PureComponent<
     const {
       baseUrl,
       beforeCreate,
+      children,
       config,
       featureAppId,
       onError,
@@ -194,16 +204,26 @@ class InternalFeatureAppLoader<TConfig = unknown> extends React.PureComponent<
         throw error;
       }
 
+      if (children) {
+        return children({error, loading: false});
+      }
+
       return renderError ? renderError(error) : null;
     }
 
     if (!featureAppDefinition) {
-      // A loading UI could be rendered here.
+      if (children) {
+        return children({
+          loading: true
+        });
+      }
+
       return null;
     }
 
     return (
       <FeatureAppContainer
+        children={children}
         baseUrl={baseUrl}
         beforeCreate={beforeCreate}
         config={config}

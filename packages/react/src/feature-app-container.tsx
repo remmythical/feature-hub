@@ -22,7 +22,7 @@ export interface BaseFeatureApp {
    * integrator has defined a loading UI, it will be rendered until the promise
    * is resolved.
    */
-  readonly loading?: Promise<void>;
+  readonly loadingPromise?: Promise<void>;
 }
 
 /**
@@ -112,10 +112,11 @@ export interface FeatureAppContainerProps<
    */
   readonly renderError?: (error: Error) => React.ReactNode;
 
-  readonly children?: (
-    featureApp?: React.ReactNode,
-    error?: Error
-  ) => React.ReactNode;
+  readonly children?: (params: {
+    featureApp?: React.ReactNode;
+    error?: Error;
+    loading: boolean;
+  }) => React.ReactNode;
 }
 
 type InternalFeatureAppContainerProps<
@@ -175,7 +176,7 @@ class InternalFeatureAppContainer<
       }
 
       // TODO: schedule rerender with async ssr manager
-      this.state = {featureApp, loading: Boolean(featureApp.loading)};
+      this.state = {featureApp, loading: true};
     } catch (error) {
       this.handleError(error);
 
@@ -192,13 +193,13 @@ class InternalFeatureAppContainer<
   public async componentDidMount(): Promise<void> {
     const container = this.containerRef.current;
 
-    if ('featureApp' in this.state && this.state.featureApp.loading) {
+    if ('featureApp' in this.state && this.state.featureApp.loadingPromise) {
       try {
-        await this.state.featureApp.loading;
-        this.setState({loading: false});
+        await this.state.featureApp.loadingPromise;
       } catch (error) {
         this.componentDidCatch(error);
       }
+      this.setState({loading: false});
     }
 
     if (
@@ -225,12 +226,25 @@ class InternalFeatureAppContainer<
   }
 
   public render(): React.ReactNode {
-    if ('featureAppError' in this.state) {
-      return this.renderError(this.state.featureAppError);
+    if (this.props.children) {
+      if ('featureAppError' in this.state) {
+        return this.props.children({
+          error: this.state.featureAppError,
+          loading: false
+        });
+      }
+
+      const featureApp = isReactFeatureApp(this.state.featureApp) ? (
+        this.state.featureApp.render()
+      ) : (
+        <div ref={this.containerRef} />
+      );
+
+      return this.props.children({featureApp, loading: this.state.loading});
     }
 
-    if (this.state.loading) {
-      return this.props.renderLoadingUi ? this.props.renderLoadingUi() : null;
+    if ('featureAppError' in this.state) {
+      return this.renderError(this.state.featureAppError);
     }
 
     if (isReactFeatureApp(this.state.featureApp)) {
